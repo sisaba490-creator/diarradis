@@ -261,7 +261,8 @@ app.post('/api/products', async (req, res) => {
   } = req.body;
   try {
     const prodId = id || `p${Date.now()}`;
-    let finalSlug = slug ? slug.trim().toLowerCase() : sanitizeSlug(name, prodId);
+    const finalName = name || 'Nouveau produit';
+    let finalSlug = slug ? String(slug).trim().toLowerCase() : sanitizeSlug(finalName, prodId);
 
     // Vérifier collision slug
     const slugCheck = await pool.query('SELECT id FROM store_products WHERE slug = $1', [finalSlug]);
@@ -274,6 +275,12 @@ app.post('/api/products', async (req, res) => {
       ? parseInt(old_price_fcfa, 10)
       : null;
     const cleanStock = Math.max(0, parseInt(stock_count, 10) || 0);
+    const cleanRating = rating !== undefined && rating !== null ? Number(rating) : 4.8;
+    const cleanReviewCount = review_count !== undefined && review_count !== null ? Math.max(0, parseInt(review_count, 10) || 0) : 0;
+    const cleanMinOrder = min_order_qty !== undefined && min_order_qty !== null ? Math.max(1, parseInt(min_order_qty, 10) || 1) : 1;
+    const cleanSoldCount = sold_count !== undefined && sold_count !== null ? Math.max(0, parseInt(sold_count, 10) || 0) : 0;
+    const cleanBrand = brand || 'Générique';
+    const cleanCatId = category_id || 'c1';
 
     const result = await pool.query(
       `INSERT INTO store_products
@@ -281,12 +288,12 @@ app.post('/api/products', async (req, res) => {
         rating, review_count, stock_count, featured, specs, gallery, tiered_pricing, tags, min_order_qty, sold_count, deal_ends_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *`,
       [
-        prodId, category_id, name, finalSlug, brand, description || '',
-        cleanPrice, cleanOldPrice, image_url, badge || null,
-        rating || 4.5, review_count || 0, cleanStock, featured || false,
-        JSON.stringify(specs || []), JSON.stringify(gallery || []),
+        prodId, cleanCatId, finalName, finalSlug, cleanBrand, description || '',
+        cleanPrice, cleanOldPrice, image_url || '', badge ? String(badge).trim() : null,
+        cleanRating, cleanReviewCount, cleanStock, Boolean(featured),
+        JSON.stringify(specs || []), JSON.stringify(gallery || (image_url ? [image_url] : [])),
         JSON.stringify(tiered_pricing || []), tags || [],
-        min_order_qty || 1, sold_count || 0, deal_ends_at || null
+        cleanMinOrder, cleanSoldCount, deal_ends_at || null
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -303,28 +310,47 @@ app.put('/api/products/:id', async (req, res) => {
     specs, gallery, tiered_pricing, tags, min_order_qty, sold_count, deal_ends_at
   } = req.body;
   try {
-    // Récupérer le slug actuel si non fourni ou pour comparaison
-    let finalSlug = slug ? slug.trim().toLowerCase() : '';
-    if (!finalSlug) {
-      const existing = await pool.query('SELECT slug FROM store_products WHERE id = $1', [id]);
-      if (existing.rows.length > 0 && existing.rows[0].slug) {
-        finalSlug = existing.rows[0].slug;
-      } else {
-        finalSlug = sanitizeSlug(name, id);
-      }
+    const existingRes = await pool.query('SELECT * FROM store_products WHERE id = $1', [id]);
+    if (existingRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Produit non trouvé' });
     }
+    const existing = existingRes.rows[0];
 
-    // Vérifier collision slug avec un AUTRE produit
+    const finalName = (name !== undefined && name !== null && name !== '') ? name : existing.name;
+    const finalCategoryId = category_id || existing.category_id;
+    const finalBrand = (brand !== undefined && brand !== null) ? brand : existing.brand;
+    const finalDescription = (description !== undefined && description !== null) ? description : (existing.description || '');
+    const finalImageUrl = (image_url !== undefined && image_url !== null && image_url !== '') ? image_url : existing.image_url;
+    const finalBadge = badge !== undefined ? (badge ? String(badge).trim() : null) : existing.badge;
+    const finalRating = rating !== undefined && rating !== null ? Number(rating) : (Number(existing.rating) || 4.8);
+    const finalReviewCount = review_count !== undefined && review_count !== null ? Math.max(0, parseInt(review_count, 10) || 0) : (existing.review_count || 0);
+    const finalStock = stock_count !== undefined && stock_count !== null ? Math.max(0, parseInt(stock_count, 10) || 0) : (existing.stock_count || 0);
+    const finalFeatured = featured !== undefined && featured !== null ? Boolean(featured) : (existing.featured || false);
+    const finalSpecs = specs !== undefined && specs !== null ? specs : (existing.specs || []);
+    const finalGallery = gallery !== undefined && gallery !== null ? gallery : (existing.gallery || []);
+    const finalTieredPricing = tiered_pricing !== undefined && tiered_pricing !== null ? tiered_pricing : (existing.tiered_pricing || []);
+    const finalTags = tags !== undefined && tags !== null ? tags : (existing.tags || []);
+    const finalMinOrderQty = min_order_qty !== undefined && min_order_qty !== null ? Math.max(1, parseInt(min_order_qty, 10) || 1) : (existing.min_order_qty || 1);
+    const finalSoldCount = sold_count !== undefined && sold_count !== null ? Math.max(0, parseInt(sold_count, 10) || 0) : (existing.sold_count || 0);
+    const finalDealEnds = deal_ends_at !== undefined ? deal_ends_at : existing.deal_ends_at;
+
+    // Prix
+    const rawPrice = price_fcfa !== undefined && price_fcfa !== null ? price_fcfa : existing.price_fcfa;
+    const cleanPrice = Math.max(0, parseInt(rawPrice, 10) || 0);
+    const rawOldPrice = old_price_fcfa !== undefined ? old_price_fcfa : existing.old_price_fcfa;
+    const cleanOldPrice = (rawOldPrice && parseInt(rawOldPrice, 10) > cleanPrice)
+      ? parseInt(rawOldPrice, 10)
+      : null;
+
+    // Slug
+    let finalSlug = slug ? String(slug).trim().toLowerCase() : (existing.slug || '');
+    if (!finalSlug) {
+      finalSlug = sanitizeSlug(finalName, id);
+    }
     const slugCheck = await pool.query('SELECT id FROM store_products WHERE slug = $1 AND id != $2', [finalSlug, id]);
     if (slugCheck.rows.length > 0) {
       finalSlug = `${finalSlug}-${id.replace(/^p/, '')}`;
     }
-
-    const cleanPrice = Math.max(0, parseInt(price_fcfa, 10) || 0);
-    const cleanOldPrice = (old_price_fcfa && parseInt(old_price_fcfa, 10) > cleanPrice)
-      ? parseInt(old_price_fcfa, 10)
-      : null;
-    const cleanStock = Math.max(0, parseInt(stock_count, 10) || 0);
 
     const result = await pool.query(
       `UPDATE store_products SET
@@ -334,11 +360,11 @@ app.put('/api/products/:id', async (req, res) => {
        tags=$17, min_order_qty=$18, sold_count=$19, deal_ends_at=$20
        WHERE id=$21 RETURNING *`,
       [
-        category_id, name, finalSlug, brand, description, cleanPrice,
-        cleanOldPrice, image_url, badge || null, rating, review_count,
-        cleanStock, featured, JSON.stringify(specs || []), JSON.stringify(gallery || []),
-        JSON.stringify(tiered_pricing || []), tags || [], min_order_qty, sold_count,
-        deal_ends_at || null, id
+        finalCategoryId, finalName, finalSlug, finalBrand, finalDescription, cleanPrice,
+        cleanOldPrice, finalImageUrl, finalBadge, finalRating, finalReviewCount,
+        finalStock, finalFeatured, JSON.stringify(finalSpecs), JSON.stringify(finalGallery),
+        JSON.stringify(finalTieredPricing), finalTags, finalMinOrderQty, finalSoldCount,
+        finalDealEnds || null, id
       ]
     );
     res.json(result.rows[0]);
