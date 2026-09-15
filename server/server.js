@@ -242,6 +242,16 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
+function sanitizeSlug(name, fallbackId) {
+  const base = (name || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return base || `prod-${fallbackId || Date.now()}`;
+}
+
 app.post('/api/products', async (req, res) => {
   const {
     id, category_id, name, slug, brand, description,
@@ -250,15 +260,30 @@ app.post('/api/products', async (req, res) => {
     tiered_pricing, tags, min_order_qty, sold_count, deal_ends_at
   } = req.body;
   try {
+    const prodId = id || `p${Date.now()}`;
+    let finalSlug = slug ? slug.trim().toLowerCase() : sanitizeSlug(name, prodId);
+
+    // Vérifier collision slug
+    const slugCheck = await pool.query('SELECT id FROM store_products WHERE slug = $1', [finalSlug]);
+    if (slugCheck.rows.length > 0) {
+      finalSlug = `${finalSlug}-${Date.now().toString(36)}`;
+    }
+
+    const cleanPrice = Math.max(0, parseInt(price_fcfa, 10) || 0);
+    const cleanOldPrice = (old_price_fcfa && parseInt(old_price_fcfa, 10) > cleanPrice)
+      ? parseInt(old_price_fcfa, 10)
+      : null;
+    const cleanStock = Math.max(0, parseInt(stock_count, 10) || 0);
+
     const result = await pool.query(
       `INSERT INTO store_products
        (id, category_id, name, slug, brand, description, price_fcfa, old_price_fcfa, image_url, badge,
         rating, review_count, stock_count, featured, specs, gallery, tiered_pricing, tags, min_order_qty, sold_count, deal_ends_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING *`,
       [
-        id || `p${Date.now()}`, category_id, name, slug, brand, description || '',
-        price_fcfa, old_price_fcfa || null, image_url, badge || null,
-        rating || 4.5, review_count || 0, stock_count || 0, featured || false,
+        prodId, category_id, name, finalSlug, brand, description || '',
+        cleanPrice, cleanOldPrice, image_url, badge || null,
+        rating || 4.5, review_count || 0, cleanStock, featured || false,
         JSON.stringify(specs || []), JSON.stringify(gallery || []),
         JSON.stringify(tiered_pricing || []), tags || [],
         min_order_qty || 1, sold_count || 0, deal_ends_at || null
@@ -278,6 +303,29 @@ app.put('/api/products/:id', async (req, res) => {
     specs, gallery, tiered_pricing, tags, min_order_qty, sold_count, deal_ends_at
   } = req.body;
   try {
+    // Récupérer le slug actuel si non fourni ou pour comparaison
+    let finalSlug = slug ? slug.trim().toLowerCase() : '';
+    if (!finalSlug) {
+      const existing = await pool.query('SELECT slug FROM store_products WHERE id = $1', [id]);
+      if (existing.rows.length > 0 && existing.rows[0].slug) {
+        finalSlug = existing.rows[0].slug;
+      } else {
+        finalSlug = sanitizeSlug(name, id);
+      }
+    }
+
+    // Vérifier collision slug avec un AUTRE produit
+    const slugCheck = await pool.query('SELECT id FROM store_products WHERE slug = $1 AND id != $2', [finalSlug, id]);
+    if (slugCheck.rows.length > 0) {
+      finalSlug = `${finalSlug}-${id.replace(/^p/, '')}`;
+    }
+
+    const cleanPrice = Math.max(0, parseInt(price_fcfa, 10) || 0);
+    const cleanOldPrice = (old_price_fcfa && parseInt(old_price_fcfa, 10) > cleanPrice)
+      ? parseInt(old_price_fcfa, 10)
+      : null;
+    const cleanStock = Math.max(0, parseInt(stock_count, 10) || 0);
+
     const result = await pool.query(
       `UPDATE store_products SET
        category_id=$1, name=$2, slug=$3, brand=$4, description=$5, price_fcfa=$6,
@@ -286,9 +334,9 @@ app.put('/api/products/:id', async (req, res) => {
        tags=$17, min_order_qty=$18, sold_count=$19, deal_ends_at=$20
        WHERE id=$21 RETURNING *`,
       [
-        category_id, name, slug, brand, description, price_fcfa,
-        old_price_fcfa || null, image_url, badge || null, rating, review_count,
-        stock_count, featured, JSON.stringify(specs || []), JSON.stringify(gallery || []),
+        category_id, name, finalSlug, brand, description, cleanPrice,
+        cleanOldPrice, image_url, badge || null, rating, review_count,
+        cleanStock, featured, JSON.stringify(specs || []), JSON.stringify(gallery || []),
         JSON.stringify(tiered_pricing || []), tags || [], min_order_qty, sold_count,
         deal_ends_at || null, id
       ]

@@ -246,55 +246,79 @@ export function AdminPanel({ onClose, onSettingsChanged }: AdminPanelProps) {
   };
 
   const saveProduct = async (product: Partial<Product>) => {
+    const existing = products.find((p) => p.id === product.id);
+    const prodId = product.id || existing?.id || `p${Date.now()}`;
+
+    // Conserver le slug existant ou en générer un unique
+    let finalSlug = (product.slug || existing?.slug || '').trim().toLowerCase();
+    if (!finalSlug) {
+      const baseSlug = (product.name || existing?.name || 'produit')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      finalSlug = baseSlug ? `${baseSlug}-${prodId.replace(/^p/, '')}` : `prod-${prodId}`;
+    }
+
+    const price = Math.max(0, Number(product.price_fcfa !== undefined ? product.price_fcfa : (existing?.price_fcfa ?? 0)));
+    const rawOldPrice = product.old_price_fcfa !== undefined ? product.old_price_fcfa : existing?.old_price_fcfa;
+    const cleanOldPrice = rawOldPrice && Number(rawOldPrice) > price ? Number(rawOldPrice) : null;
+
     const payload: Product = {
-      id: product.id || `p${Date.now()}`,
-      name: product.name || 'Nouveau produit',
-      slug: product.slug || product.name?.toLowerCase().replace(/\s+/g, '-') || `prod-${Date.now()}`,
-      brand: product.brand || 'Générique',
-      description: product.description || '',
-      price_fcfa: Number(product.price_fcfa) || 0,
-      old_price_fcfa: product.old_price_fcfa ? Number(product.old_price_fcfa) : null,
-      image_url: product.image_url || '',
-      badge: product.badge || null,
-      rating: product.rating || 4.8,
-      review_count: product.review_count || 0,
-      stock_count: Number(product.stock_count) || 0,
-      featured: product.featured || false,
-      specs: product.specs || [],
-      gallery: product.gallery || (product.image_url ? [product.image_url] : []),
-      tiered_pricing: product.tiered_pricing || [],
-      tags: product.tags || [],
-      min_order_qty: product.min_order_qty || 1,
-      sold_count: product.sold_count || 0,
-      category_id: product.category_id || categories[0]?.id || 'c1',
-      deal_ends_at: product.deal_ends_at !== undefined ? product.deal_ends_at : null,
+      id: prodId,
+      name: product.name || existing?.name || 'Nouveau produit',
+      slug: finalSlug,
+      brand: product.brand || existing?.brand || 'Générique',
+      description: product.description ?? existing?.description ?? '',
+      price_fcfa: price,
+      old_price_fcfa: cleanOldPrice,
+      image_url: product.image_url || existing?.image_url || '',
+      badge: product.badge !== undefined ? product.badge : (existing?.badge || null),
+      rating: product.rating || existing?.rating || 4.8,
+      review_count: product.review_count || existing?.review_count || 0,
+      stock_count: Math.max(0, Number(product.stock_count !== undefined ? product.stock_count : (existing?.stock_count ?? 0))),
+      featured: product.featured !== undefined ? product.featured : (existing?.featured || false),
+      specs: product.specs || existing?.specs || [],
+      gallery: product.gallery || existing?.gallery || (product.image_url ? [product.image_url] : []),
+      tiered_pricing: product.tiered_pricing || existing?.tiered_pricing || [],
+      tags: product.tags || existing?.tags || [],
+      min_order_qty: product.min_order_qty || existing?.min_order_qty || 1,
+      sold_count: product.sold_count || existing?.sold_count || 0,
+      category_id: product.category_id || existing?.category_id || categories[0]?.id || 'c1',
+      deal_ends_at: product.deal_ends_at !== undefined ? product.deal_ends_at : (existing?.deal_ends_at || null),
     };
 
     try {
+      let savedResult: Product | undefined;
       if (product.id) {
-        await api.products.update(product.id, payload);
+        savedResult = await api.products.update(product.id, payload);
       } else {
-        await api.products.create(payload);
+        savedResult = await api.products.create(payload);
       }
-    } catch (err) {
-      console.warn('Erreur API sauvegarde produit, sauvegarde locale active:', err);
+
+      const finalSaved: Product = savedResult && savedResult.id ? savedResult : payload;
+
+      setProducts((current) => {
+        let updated: Product[];
+        if (product.id) {
+          updated = current.map((p) => (p.id === product.id ? { ...p, ...finalSaved } : p));
+        } else {
+          updated = [finalSaved, ...current];
+        }
+        localStorage.setItem('malishop_products', JSON.stringify(updated));
+        return updated;
+      });
+
+      setShowProductForm(false);
+      setEditingProduct(null);
+      onSettingsChanged();
+      notify('Produit enregistré avec succès dans la base de données');
+    } catch (err: any) {
+      console.error('Erreur API sauvegarde produit:', err);
+      notify(`Erreur lors de l'enregistrement : ${err.message || 'Échec de connexion au serveur'}`);
+      throw err;
     }
-
-    setProducts((current) => {
-      let updated: Product[];
-      if (product.id) {
-        updated = current.map((p) => (p.id === product.id ? { ...p, ...payload } : p));
-      } else {
-        updated = [payload, ...current];
-      }
-      localStorage.setItem('malishop_products', JSON.stringify(updated));
-      return updated;
-    });
-
-    setShowProductForm(false);
-    setEditingProduct(null);
-    onSettingsChanged();
-    notify('Produit enregistré avec succès');
   };
 
   const updateOrderStatus = async (id: string, status: string) => {
@@ -1658,9 +1682,10 @@ export function AdminPanel({ onClose, onSettingsChanged }: AdminPanelProps) {
   );
 }
 
-function ProductForm({ product, categories, brands = [], onSave, onCancel }: { product: Product | null; categories: Category[]; brands?: Brand[]; onSave: (p: Partial<Product>) => void; onCancel: () => void }) {
+function ProductForm({ product, categories, brands = [], onSave, onCancel }: { product: Product | null; categories: Category[]; brands?: Brand[]; onSave: (p: Partial<Product>) => Promise<void> | void; onCancel: () => void }) {
   const [form, setForm] = useState({
     name: product?.name || '',
+    slug: product?.slug || '',
     brand: product?.brand || '',
     description: product?.description || '',
     price_fcfa: product?.price_fcfa || 0,
@@ -1673,6 +1698,8 @@ function ProductForm({ product, categories, brands = [], onSave, onCancel }: { p
     is_flash_deal: Boolean(product?.deal_ends_at),
     deal_ends_at: product?.deal_ends_at || '',
   });
+
+  const [isSaving, setIsSaving] = useState(false);
 
   const [imageMode, setImageMode] = useState<'upload' | 'url'>('upload');
   const [isUploading, setIsUploading] = useState(false);
@@ -1861,8 +1888,26 @@ function ProductForm({ product, categories, brands = [], onSave, onCancel }: { p
 
       <label><span>Description</span><textarea value={form.description} onChange={(e) => update('description', e.target.value)} /></label>
       <div className="form-grid">
-        <label><span>Prix promo / de vente (FCFA) *</span><input type="number" value={form.price_fcfa} onChange={(e) => update('price_fcfa', Number(e.target.value))} /></label>
-        <label><span>Ancien prix avant réduction (FCFA)</span><input type="number" value={form.old_price_fcfa} onChange={(e) => update('old_price_fcfa', Number(e.target.value))} placeholder="Ex : 120000 (barré)" /></label>
+        <label>
+          <span>Prix promo / de vente (FCFA) *</span>
+          <input
+            type="number"
+            min="0"
+            value={form.price_fcfa === 0 ? '' : form.price_fcfa}
+            onChange={(e) => update('price_fcfa', e.target.value === '' ? 0 : Number(e.target.value))}
+            placeholder="0"
+          />
+        </label>
+        <label>
+          <span>Ancien prix avant réduction (FCFA)</span>
+          <input
+            type="number"
+            min="0"
+            value={form.old_price_fcfa === 0 || !form.old_price_fcfa ? '' : form.old_price_fcfa}
+            onChange={(e) => update('old_price_fcfa', e.target.value === '' ? 0 : Number(e.target.value))}
+            placeholder="Ex : 120000 (barré)"
+          />
+        </label>
       </div>
 
       {/* ─── NOUVEAU : CONFIGURATION OFFRE FLASH LIMITÉE ────────────────────── */}
@@ -1959,23 +2004,44 @@ function ProductForm({ product, categories, brands = [], onSave, onCancel }: { p
       <label><span>Catégorie</span><select value={form.category_id} onChange={(e) => update('category_id', e.target.value)}>{categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
       <label className="filter-toggle"><input type="checkbox" checked={form.featured} onChange={(e) => update('featured', e.target.checked)} /><span>Mettre en avant sur la page d'accueil (Vedette)</span></label>
       <div className="product-form-actions">
-        <button className="text-button" onClick={onCancel}>Annuler</button>
+        <button className="text-button" onClick={onCancel} disabled={isSaving}>Annuler</button>
         <button
           className="primary-button"
-          onClick={() => {
+          disabled={isSaving}
+          onClick={async () => {
             const finalDealEnds = form.is_flash_deal
               ? (form.deal_ends_at || new Date(Date.now() + 48 * 3600 * 1000).toISOString())
               : null;
-            onSave({
-              ...form,
-              id: product?.id,
-              old_price_fcfa: form.old_price_fcfa || null,
-              badge: form.badge || null,
-              deal_ends_at: finalDealEnds,
-            });
+            const priceNum = Math.max(0, Number(form.price_fcfa) || 0);
+            const rawOldPrice = Number(form.old_price_fcfa) || 0;
+            const cleanOldPrice = rawOldPrice > priceNum ? rawOldPrice : null;
+
+            setIsSaving(true);
+            try {
+              await onSave({
+                ...(product || {}),
+                ...form,
+                id: product?.id,
+                slug: product?.slug || form.slug,
+                price_fcfa: priceNum,
+                old_price_fcfa: cleanOldPrice,
+                badge: form.badge ? form.badge.trim() : null,
+                deal_ends_at: finalDealEnds,
+              });
+            } catch {
+              // l'erreur a déjà été affichée via notify() dans saveProduct
+            } finally {
+              setIsSaving(false);
+            }
           }}
         >
-          Enregistrer le produit
+          {isSaving ? (
+            <>
+              <Loader2 size={16} className="animate-spin" /> Enregistrement en cours...
+            </>
+          ) : (
+            'Enregistrer le produit'
+          )}
         </button>
       </div>
     </div>
