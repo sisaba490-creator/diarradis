@@ -27,7 +27,9 @@ export function FilterSidebar({ products, managedBrands, filters, onChange, isOp
   const allBrands: string[] = managedBrands && managedBrands.length > 0
     ? managedBrands.filter((b) => b.visible !== false).map((b) => b.name).sort()
     : [...new Set(products.map((p) => p.brand))].sort();
-  const priceMax = Math.max(...products.map((p) => p.price_fcfa), 500000);
+  const priceMax = products.length > 0
+    ? Math.max(...products.map((p) => p.price_fcfa || 0), 500000)
+    : 500000;
 
   const toggleBrand = (brand: string) => {
     const brands = filters.brands.includes(brand)
@@ -76,13 +78,13 @@ export function FilterSidebar({ products, managedBrands, filters, onChange, isOp
             min={0}
             max={priceMax}
             step={5000}
-            value={filters.maxPrice}
+            value={Math.min(filters.maxPrice ?? priceMax, priceMax)}
             onChange={(e) => onChange({ ...filters, maxPrice: Number(e.target.value) })}
             className="price-slider"
           />
           <div className="price-range-labels">
             <span>0 F</span>
-            <strong>{formatPrice(filters.maxPrice)} F</strong>
+            <strong>{formatPrice(Math.min(filters.maxPrice ?? priceMax, priceMax))} F</strong>
           </div>
         </div>
 

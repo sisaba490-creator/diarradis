@@ -55,7 +55,16 @@ function App() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [toast, setToast] = useState('');
-  const [filters, setFilters] = useState<FilterState>({ brands: [], minPrice: 0, maxPrice: 500000, minRating: 0, inStockOnly: false, onSaleOnly: false });
+  const [filters, setFilters] = useState<FilterState>(() => {
+    try {
+      const saved = localStorage.getItem('malishop_products');
+      const prods: Product[] = saved ? JSON.parse(saved) : demoProducts;
+      const maxP = prods.length > 0 ? Math.max(...prods.map((p) => p.price_fcfa || 0), 500000) : 500000;
+      return { brands: [], minPrice: 0, maxPrice: maxP, minRating: 0, inStockOnly: false, onSaleOnly: false };
+    } catch {
+      return { brands: [], minPrice: 0, maxPrice: 500000, minRating: 0, inStockOnly: false, onSaleOnly: false };
+    }
+  });
   const [adminOpen, setAdminOpen] = useState(false);
   const [brands, setBrands] = useState<Brand[]>(() => {
     try {
@@ -107,8 +116,11 @@ function App() {
         ]);
         if (mounted && cats?.length) setCategories(cats as Category[]);
         if (mounted && prods?.length) {
-          setProducts(prods as Product[]);
-          localStorage.setItem('malishop_products', JSON.stringify(prods));
+          const loadedProds = prods as Product[];
+          setProducts(loadedProds);
+          localStorage.setItem('malishop_products', JSON.stringify(loadedProds));
+          const newMax = Math.max(...loadedProds.map((p) => p.price_fcfa || 0), 500000);
+          setFilters((prev) => ({ ...prev, maxPrice: Math.max(prev.maxPrice, newMax) }));
         }
         if (mounted && revs?.length) setReviews(revs as Review[]);
         if (mounted && settings) {
@@ -132,12 +144,20 @@ function App() {
     const handleProductsUpdated = () => {
       try {
         const savedProds = localStorage.getItem('malishop_products');
-        if (savedProds) setProducts(JSON.parse(savedProds));
+        if (savedProds) {
+          const parsed: Product[] = JSON.parse(savedProds);
+          setProducts(parsed);
+          const newMax = Math.max(...parsed.map((p) => p.price_fcfa || 0), 500000);
+          setFilters((prev) => ({ ...prev, maxPrice: Math.max(prev.maxPrice, newMax) }));
+        }
       } catch {}
       api.products.list().then((prods) => {
         if (prods?.length) {
-          setProducts(prods as Product[]);
-          localStorage.setItem('malishop_products', JSON.stringify(prods));
+          const freshProds = prods as Product[];
+          setProducts(freshProds);
+          localStorage.setItem('malishop_products', JSON.stringify(freshProds));
+          const newMax = Math.max(...freshProds.map((p) => p.price_fcfa || 0), 500000);
+          setFilters((prev) => ({ ...prev, maxPrice: Math.max(prev.maxPrice, newMax) }));
         }
       }).catch(() => {});
     };
