@@ -2460,7 +2460,8 @@ button {
 .footer-main button:hover, .footer-main a:hover { color: var(--green-light); }
 .newsletter p { font-size: 13px; color: #64748b; margin-bottom: 14px; }
 
-.newsletter > div {
+.newsletter > div,
+.newsletter form {
   height: 44px;
   display: flex;
   background: #1e293b;

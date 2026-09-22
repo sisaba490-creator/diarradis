@@ -88,11 +88,10 @@ export function AdminPanel({ onClose, onSettingsChanged }: AdminPanelProps) {
   const [slideImageMode, setSlideImageMode] = useState<Record<string, 'upload' | 'url'>>({ '0': 'upload', '1': 'upload', '2': 'upload' });
   const [slideUploading, setSlideUploading] = useState<Record<string, boolean>>({});
   const [slideUploadError, setSlideUploadError] = useState<Record<string, string>>({});
-  const slideFileRefs = [
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-  ];
+  const slideFileRef0 = useRef<HTMLInputElement>(null);
+  const slideFileRef1 = useRef<HTMLInputElement>(null);
+  const slideFileRef2 = useRef<HTMLInputElement>(null);
+  const slideFileRefs = [slideFileRef0, slideFileRef1, slideFileRef2];
 
   const notify = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 2500); };
 

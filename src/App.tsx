@@ -102,6 +102,7 @@ function App() {
   });
   const [accountOpen, setAccountOpen] = useState(false);
   const [requiredAuthForCheckout, setRequiredAuthForCheckout] = useState(false);
+  const [newsletterEmail, setNewsletterEmail] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -251,12 +252,17 @@ function App() {
 
   const handleStartCheckout = () => {
     setCartOpen(false);
-    if (!currentCustomer) {
-      setRequiredAuthForCheckout(true);
-      setAccountOpen(true);
-    } else {
-      setCheckoutOpen(true);
+    setCheckoutOpen(true);
+  };
+
+  const handleNewsletterSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newsletterEmail || !newsletterEmail.includes('@')) {
+      notify('Veuillez entrer une adresse e-mail valide.');
+      return;
     }
+    notify('Merci pour votre inscription à notre newsletter !');
+    setNewsletterEmail('');
   };
 
   const completeOrder = async (details: {
@@ -270,10 +276,11 @@ function App() {
   }) => {
     const subtotal = cart.reduce((sum, item) => sum + item.price_fcfa * item.quantity, 0);
     const delivery = details.city === 'Bamako' ? 2500 : 5000;
-    const generatedId = `CMD-${Math.floor(1000 + Math.random() * 9000)}`;
+    // Générer un ID local garanti dès le départ — jamais null pour l'utilisateur
+    const localId = `o${Date.now()}`;
 
     const orderPayload = {
-      id: generatedId,
+      id: localId,
       customer_id: details.customer_id || currentCustomer?.id || null,
       customer_name: details.name,
       phone: details.phone,
@@ -294,29 +301,42 @@ function App() {
       })),
     };
 
-    let confirmedOrderId = generatedId;
+    // Sauvegarde locale immédiate — garantit la persistance même sans réseau
+    try {
+      const savedOrders = localStorage.getItem('malishop_orders');
+      const ordersList = savedOrders ? JSON.parse(savedOrders) : [];
+      ordersList.unshift(orderPayload);
+      localStorage.setItem('malishop_orders', JSON.stringify(ordersList));
+    } catch {}
 
+    // Envoi à l'API en arrière-plan — met à jour l'ID si l'API répond
+    let confirmedOrderId = localId;
     try {
       const order = await api.orders.create(orderPayload);
       if (order && order.id) {
         confirmedOrderId = order.id;
+        // Mettre à jour l'entrée locale avec l'ID confirmé par le serveur
+        try {
+          const savedOrders = localStorage.getItem('malishop_orders');
+          if (savedOrders) {
+            const ordersList = JSON.parse(savedOrders);
+            const idx = ordersList.findIndex((o: any) => o.id === localId);
+            if (idx !== -1) {
+              ordersList[idx] = { ...ordersList[idx], id: confirmedOrderId };
+              localStorage.setItem('malishop_orders', JSON.stringify(ordersList));
+            }
+          }
+        } catch {}
       }
     } catch (err) {
-      console.warn('Création commande en ligne échouée, fallback local:', err);
+      console.warn('Création commande en ligne échouée, commande sauvegardée localement:', err);
     }
 
-    // Sauvegarde immédiate dans localStorage pour assurer la continuité locale
-    try {
-      const savedOrders = localStorage.getItem('malishop_orders');
-      const ordersList = savedOrders ? JSON.parse(savedOrders) : [];
-      const finalizedOrder = { ...orderPayload, id: confirmedOrderId };
-      ordersList.unshift(finalizedOrder);
-      localStorage.setItem('malishop_orders', JSON.stringify(ordersList));
-    } catch {}
-
     setCart([]);
+    // Retourner toujours un ID valide — jamais null
     return confirmedOrderId;
   };
+
 
   const goToHome = () => {
     setActiveCategory('Tous les produits');
@@ -691,7 +711,22 @@ function App() {
             <button>Livraison & retours</button>
             <button>Questions fréquentes</button>
           </div>
-          <div className="newsletter"><h3>Nos bons plans</h3><p>Recevez nos offres et nouveautés directement.</p><div><input placeholder="Votre adresse e-mail" type="email" /><button aria-label="S'inscrire"><ArrowRight size={17} /></button></div></div>
+          <div className="newsletter">
+            <h3>Nos bons plans</h3>
+            <p>Recevez nos offres et nouveautés directement.</p>
+            <form onSubmit={handleNewsletterSubmit}>
+              <input
+                placeholder="Votre adresse e-mail"
+                type="email"
+                required
+                value={newsletterEmail}
+                onChange={(e) => setNewsletterEmail(e.target.value)}
+              />
+              <button type="submit" aria-label="S'inscrire">
+                <ArrowRight size={17} />
+              </button>
+            </form>
+          </div>
         </div>
         <div className="footer-bottom container"><span>{s('footer_copyright', '© 2026 Malishop. Fait avec soin à Bamako.')}</span><span>Mentions légales&nbsp;&nbsp; · &nbsp;&nbsp;Confidentialité</span></div>
       </footer>
@@ -713,6 +748,7 @@ function App() {
           customer={currentCustomer}
           whatsappPhone={s('whatsapp_phone', s('announcement_phone', '+223 74 79 82 16'))}
           onClose={() => setCheckoutOpen(false)}
+          onOpenAccount={() => { setCheckoutOpen(false); setAccountOpen(true); }}
           onComplete={completeOrder}
         />
       )}

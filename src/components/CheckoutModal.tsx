@@ -29,6 +29,7 @@ type CheckoutModalProps = {
   customer: Customer | null;
   whatsappPhone?: string;
   onClose: () => void;
+  onOpenAccount?: () => void;
   onComplete: (details: {
     customer_id?: string;
     name: string;
@@ -77,7 +78,7 @@ const PAYMENT_METHODS: {
   },
 ];
 
-export function CheckoutModal({ items, customer, whatsappPhone = '+223 74 79 82 16', onClose, onComplete }: CheckoutModalProps) {
+export function CheckoutModal({ items, customer, whatsappPhone = '+223 74 79 82 16', onClose, onOpenAccount, onComplete }: CheckoutModalProps) {
   const [submitted, setSubmitted] = useState(false);
   const [orderId, setOrderId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -319,7 +320,7 @@ export function CheckoutModal({ items, customer, whatsappPhone = '+223 74 79 82 
             </div>
 
             {/* Badge Client Connecté */}
-            {customer && (
+            {customer ? (
               <div className="checkout-customer-badge">
                 <div className="badge-avatar">
                   <UserCheck size={16} />
@@ -330,7 +331,40 @@ export function CheckoutModal({ items, customer, whatsappPhone = '+223 74 79 82 
                 </div>
                 <span className="badge-tag">Pré-rempli</span>
               </div>
-            )}
+            ) : onOpenAccount ? (
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '10px',
+                padding: '10px 14px',
+                fontSize: '13px',
+                color: '#475569',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '16px',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}>
+                <span>Déjà client ? Connectez-vous pour pré-remplir vos infos.</span>
+                <button
+                  type="button"
+                  onClick={onOpenAccount}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#059669',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    padding: 0,
+                    fontSize: '13px'
+                  }}
+                >
+                  Se connecter
+                </button>
+              </div>
+            ) : null}
 
             <form onSubmit={submit} className="checkout-form">
               {/* Section 1 : Informations de livraison */}

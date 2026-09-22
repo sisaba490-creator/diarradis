@@ -352,11 +352,20 @@ app.get('/api/reviews', async (req, res) => {
 
 app.post('/api/reviews', async (req, res) => {
   const { product_id, author_name, rating, comment, verified } = req.body;
+  if (!author_name || !rating) {
+    return res.status(400).json({ error: 'Nom et note sont obligatoires.' });
+  }
   try {
+    // Valider product_id pour éviter violation FK
+    let validProductId = null;
+    if (product_id) {
+      const prodCheck = await pool.query('SELECT id FROM store_products WHERE id = $1', [product_id]);
+      if (prodCheck.rows.length > 0) validProductId = product_id;
+    }
     const result = await pool.query(
       `INSERT INTO store_reviews (id, product_id, author_name, rating, comment, verified)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [`r${Date.now()}`, product_id, author_name, rating, comment || '', verified || false]
+      [`r${Date.now()}`, validProductId, author_name, Math.min(5, Math.max(1, Number(rating) || 5)), comment || '', verified || false]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -450,7 +459,14 @@ app.get('/api/customers/:id/orders', async (req, res) => {
       'SELECT * FROM store_orders WHERE customer_id = $1 ORDER BY created_at DESC',
       [req.params.id]
     );
-    const items = await pool.query('SELECT * FROM store_order_items ORDER BY created_at ASC');
+    if (orders.rows.length === 0) return res.json([]);
+    // Requête optimisée : charge uniquement les items des commandes de ce client
+    const orderIds = orders.rows.map(o => o.id);
+    const placeholders = orderIds.map((_, i) => `$${i + 1}`).join(',');
+    const items = await pool.query(
+      `SELECT * FROM store_order_items WHERE order_id IN (${placeholders}) ORDER BY id ASC`,
+      orderIds
+    );
     const result = orders.rows.map(order => ({
       ...order,
       items: items.rows.filter(item => item.order_id === order.id)
