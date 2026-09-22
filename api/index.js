@@ -622,6 +622,49 @@ app.post('/api/settings', async (req, res) => {
   }
 });
 
+// ─── AUTHENTIFICATION & SÉCURITÉ ADMIN ────────────────────────────────────────
+app.post('/api/admin/login', async (req, res) => {
+  const { password } = req.body;
+  try {
+    const result = await pool.query("SELECT value FROM site_settings WHERE key = 'admin_password'");
+    const expected = result.rows.length > 0 ? result.rows[0].value : 'admin2026';
+    if (password === expected) {
+      res.json({ success: true, message: 'Connexion réussie' });
+    } else {
+      res.status(401).json({ success: false, message: 'Mot de passe incorrect' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/change-password', async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.trim().length < 4) {
+    return res.status(400).json({ success: false, message: 'Le mot de passe doit comporter au moins 4 caractères' });
+  }
+
+  try {
+    const result = await pool.query("SELECT value FROM site_settings WHERE key = 'admin_password'");
+    const expected = result.rows.length > 0 ? result.rows[0].value : 'admin2026';
+
+    if (currentPassword && currentPassword !== expected) {
+      return res.status(401).json({ success: false, message: 'Le mot de passe actuel est incorrect' });
+    }
+
+    await pool.query(
+      `INSERT INTO site_settings (id, key, value)
+       VALUES ('s_admin_password', 'admin_password', $1)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+      [newPassword.trim()]
+    );
+
+    res.json({ success: true, message: 'Mot de passe administrateur mis à jour avec succès' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── SANTÉ ────────────────────────────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {
   try {

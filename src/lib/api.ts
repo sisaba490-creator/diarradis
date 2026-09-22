@@ -147,6 +147,22 @@ export const api = {
       }),
   },
 
+  // ─── Sécurité Admin ─────────────────────────────────────────────────────────
+  admin: {
+    login: (password: string) =>
+      fetchJSON<{ success: boolean; message?: string }>(`${BASE}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      }),
+    changePassword: (data: { currentPassword?: string; newPassword: string }) =>
+      fetchJSON<{ success: boolean; message?: string }>(`${BASE}/admin/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
+  },
+
   // ─── Santé ──────────────────────────────────────────────────────────────────
   health: () => fetchJSON<any>(`${BASE}/health`),
 };

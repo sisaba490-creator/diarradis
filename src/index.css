@@ -4033,6 +4033,117 @@ button {
   gap: 14px;
 }
 
+/* ── Sécurité & Mot de passe admin ───────────────────────────────────────── */
+.admin-security-card {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  max-width: 680px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+}
+
+.admin-security-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  background: linear-gradient(135deg, rgba(6, 78, 59, 0.06) 0%, rgba(4, 120, 87, 0.03) 100%);
+  border: 1px solid rgba(5, 150, 105, 0.2);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+
+.admin-security-icon {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #064e3b 0%, #047857 100%);
+  color: white;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 12px rgba(4, 120, 87, 0.25);
+}
+
+.admin-security-banner h3 {
+  font-family: var(--font-heading);
+  font-size: 15px;
+  font-weight: 800;
+  color: #064e3b;
+  margin: 0 0 4px;
+}
+
+.admin-security-banner p {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.admin-security-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.security-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.security-form-group label span,
+.security-form-grid label span {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.security-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .security-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.security-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.security-alert-success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+}
+
+.security-alert-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+.security-form-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
 /* ── Tableau des produits ─────────────────────────────────────────────────── */
 .admin-table-wrap {
   background: white;

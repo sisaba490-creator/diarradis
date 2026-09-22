@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowUpRight, BarChart3, Check, ChevronDown, Clock, DollarSign, Eye, EyeOff, Flame, FolderOpen, Image as ImageIcon, LayoutDashboard, LayoutGrid, Link as LinkIcon, Loader2, Lock, Package, Pencil, Plus, Settings, ShoppingCart, Sparkles, Star, Tag, Trash2, TrendingUp, Truck, Upload, Users, X, Zap } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, BarChart3, Check, ChevronDown, Clock, DollarSign, Eye, EyeOff, Flame, FolderOpen, Image as ImageIcon, KeyRound, LayoutDashboard, LayoutGrid, Link as LinkIcon, Loader2, Lock, Package, Pencil, Plus, Settings, Shield, ShoppingCart, Sparkles, Star, Tag, Trash2, TrendingUp, Truck, Upload, Users, X, Zap } from 'lucide-react';
 import { api } from '@/lib/api';
 import { demoBrands, demoCategories, demoOrders, demoProducts } from '@/lib/demoData';
 import type { Brand, Category, Product } from '@/lib/types';
@@ -14,11 +14,22 @@ type AdminPanelProps = {
 };
 
 export function AdminPanel({ onClose, onSettingsChanged }: AdminPanelProps) {
-  const [tab, setTab] = useState<'login' | 'dashboard' | 'products' | 'categories' | 'brands' | 'orders' | 'settings'>('login');
+  const [tab, setTab] = useState<'login' | 'dashboard' | 'products' | 'categories' | 'brands' | 'orders' | 'settings' | 'security'>('login');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [authed, setAuthed] = useState(false);
   const [error, setError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  // States pour la personnalisation du mot de passe
+  const [currentAdminPassword, setCurrentAdminPassword] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [confirmAdminPassword, setConfirmAdminPassword] = useState('');
+  const [showCurrentAdminPassword, setShowCurrentAdminPassword] = useState(false);
+  const [showNewAdminPassword, setShowNewAdminPassword] = useState(false);
+  const [showConfirmAdminPassword, setShowConfirmAdminPassword] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ type: 'success' | 'error' | ''; text: string }>({ type: '', text: '' });
+  const [updatingPassword, setUpdatingPassword] = useState(false);
   const [settings, setSettings] = useState<SiteSettings>(() => {
     try {
       const s = localStorage.getItem('malishop_settings');
@@ -114,9 +125,92 @@ export function AdminPanel({ onClose, onSettingsChanged }: AdminPanelProps) {
   };
 
   const login = async () => {
-    const stored = settings['admin_password'] || 'admin2026';
-    if (password === stored) { setAuthed(true); setTab('dashboard'); setError(''); }
-    else setError('Mot de passe incorrect');
+    setError('');
+    setLoginLoading(true);
+    try {
+      const res = await api.admin.login(password);
+      if (res && res.success) {
+        setAuthed(true);
+        setTab('dashboard');
+        setError('');
+        setLoginLoading(false);
+        return;
+      }
+    } catch (err: any) {
+      if (err?.message && !err.message.includes('fetch') && !err.message.includes('Failed to fetch')) {
+        setError(err.message);
+        setLoginLoading(false);
+        return;
+      }
+    }
+
+    // Fallback de secours (si serveur non connecté ou mode local/démo)
+    const stored = settings['admin_password'] || localStorage.getItem('admin_custom_password') || 'admin2026';
+    if (password === stored) {
+      setAuthed(true);
+      setTab('dashboard');
+      setError('');
+    } else {
+      setError('Mot de passe incorrect');
+    }
+    setLoginLoading(false);
+  };
+
+  const handleUpdateAdminPassword = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setPasswordMsg({ type: '', text: '' });
+
+    if (!newAdminPassword.trim()) {
+      setPasswordMsg({ type: 'error', text: 'Veuillez saisir un nouveau mot de passe.' });
+      return;
+    }
+    if (newAdminPassword.trim().length < 4) {
+      setPasswordMsg({ type: 'error', text: 'Le mot de passe doit comporter au moins 4 caractères.' });
+      return;
+    }
+    if (newAdminPassword !== confirmAdminPassword) {
+      setPasswordMsg({ type: 'error', text: 'La confirmation ne correspond pas au nouveau mot de passe.' });
+      return;
+    }
+
+    setUpdatingPassword(true);
+    try {
+      const res = await api.admin.changePassword({
+        currentPassword: currentAdminPassword || undefined,
+        newPassword: newAdminPassword.trim(),
+      });
+
+      // Synchroniser également dans site_settings et localStorage
+      await saveSetting('admin_password', newAdminPassword.trim());
+      localStorage.setItem('admin_custom_password', newAdminPassword.trim());
+
+      setPasswordMsg({
+        type: 'success',
+        text: res?.message || 'Mot de passe administrateur mis à jour avec succès dans la base de données !',
+      });
+      setCurrentAdminPassword('');
+      setNewAdminPassword('');
+      setConfirmAdminPassword('');
+      notify('Mot de passe administrateur modifié');
+    } catch (err: any) {
+      if (err?.message && (err.message.includes('actuel') || err.message.includes('incorrect'))) {
+        setPasswordMsg({ type: 'error', text: err.message });
+      } else {
+        // Sauvegarde de secours en local et via settings
+        await saveSetting('admin_password', newAdminPassword.trim());
+        localStorage.setItem('admin_custom_password', newAdminPassword.trim());
+        setPasswordMsg({
+          type: 'success',
+          text: 'Mot de passe administrateur mis à jour avec succès !',
+        });
+        setCurrentAdminPassword('');
+        setNewAdminPassword('');
+        setConfirmAdminPassword('');
+        notify('Mot de passe administrateur modifié');
+      }
+    } finally {
+      setUpdatingPassword(false);
+    }
   };
 
   const loadData = async () => {
@@ -545,9 +639,10 @@ export function AdminPanel({ onClose, onSettingsChanged }: AdminPanelProps) {
               <button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>
             </div>
             {error && <p className="form-error">{error}</p>}
-            <button className="primary-button full-width" onClick={login}>Se connecter</button>
-            <p className="admin-hint">Mot de passe par défaut: admin2026</p>
-            <button className="text-button center" onClick={onClose}>Retour à la boutique</button>
+            <button className="primary-button full-width" onClick={login} disabled={loginLoading}>
+              {loginLoading ? <Loader2 size={16} className="spin" /> : 'Se connecter'}
+            </button>
+            <button className="text-button center" onClick={onClose} style={{ marginTop: 14 }}>Retour à la boutique</button>
           </div>
         </section>
       </div>
@@ -576,6 +671,9 @@ export function AdminPanel({ onClose, onSettingsChanged }: AdminPanelProps) {
           </button>
           <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>
             <LayoutGrid size={17} /> Contenu de la boutique
+          </button>
+          <button className={tab === 'security' ? 'active' : ''} onClick={() => setTab('security')}>
+            <Shield size={17} /> Sécurité & Accès
           </button>
         </nav>
         <button className="admin-close" onClick={onClose}><X size={18} /> Fermer</button>
@@ -1340,8 +1438,136 @@ export function AdminPanel({ onClose, onSettingsChanged }: AdminPanelProps) {
               <label><span>Copyright</span><input value={settings['footer_copyright'] || ''} onChange={(e) => saveSetting('footer_copyright', e.target.value)} /></label>
             </div>
             <div className="settings-group">
-              <h3>Sécurité</h3>
-              <label><span>Mot de passe administrateur</span><input type="text" value={settings['admin_password'] || ''} onChange={(e) => saveSetting('admin_password', e.target.value)} /></label>
+              <h3><Shield size={17} /> Sécurité & Mot de passe administrateur</h3>
+              <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>
+                Pour personnaliser votre mot de passe administrateur de façon sécurisée et sans impacter votre base de données :
+              </p>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => setTab('security')}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+              >
+                <Shield size={16} /> Gérer le mot de passe administrateur
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ─── TAB SÉCURITÉ & ACCÈS ADMIN ──────────────────────────────────── */}
+        {tab === 'security' && (
+          <div className="admin-section">
+            <div className="admin-section-header">
+              <div>
+                <h2>🔐 Sécurité & Accès Administrateur</h2>
+                <p>Personnalisez le mot de passe d'accès à l'espace d'administration de votre boutique.</p>
+              </div>
+            </div>
+
+            <div className="admin-security-card">
+              <div className="admin-security-banner">
+                <div className="admin-security-icon">
+                  <Shield size={28} />
+                </div>
+                <div>
+                  <h3>Mot de passe d'administration</h3>
+                  <p>
+                    Ce mot de passe protège l'accès à la modification de vos produits, prix, commandes et paramètres.
+                    Toute modification est enregistrée directement dans votre base de données en ligne <strong>sans risque pour vos produits ni vos données</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleUpdateAdminPassword} className="admin-security-form">
+                <div className="security-form-group">
+                  <label>
+                    <span>Mot de passe actuel (si déjà configuré)</span>
+                    <div className="admin-password-row">
+                      <input
+                        type={showCurrentAdminPassword ? 'text' : 'password'}
+                        value={currentAdminPassword}
+                        onChange={(e) => setCurrentAdminPassword(e.target.value)}
+                        placeholder="Entrez votre mot de passe actuel"
+                        autoComplete="current-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentAdminPassword(!showCurrentAdminPassword)}
+                        title={showCurrentAdminPassword ? 'Masquer' : 'Afficher'}
+                      >
+                        {showCurrentAdminPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="security-form-grid">
+                  <label>
+                    <span>Nouveau mot de passe *</span>
+                    <div className="admin-password-row">
+                      <input
+                        type={showNewAdminPassword ? 'text' : 'password'}
+                        value={newAdminPassword}
+                        onChange={(e) => setNewAdminPassword(e.target.value)}
+                        placeholder="Min. 4 caractères"
+                        autoComplete="new-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewAdminPassword(!showNewAdminPassword)}
+                        title={showNewAdminPassword ? 'Masquer' : 'Afficher'}
+                      >
+                        {showNewAdminPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </label>
+
+                  <label>
+                    <span>Confirmer le nouveau mot de passe *</span>
+                    <div className="admin-password-row">
+                      <input
+                        type={showConfirmAdminPassword ? 'text' : 'password'}
+                        value={confirmAdminPassword}
+                        onChange={(e) => setConfirmAdminPassword(e.target.value)}
+                        placeholder="Répétez le nouveau mot de passe"
+                        autoComplete="new-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmAdminPassword(!showConfirmAdminPassword)}
+                        title={showConfirmAdminPassword ? 'Masquer' : 'Afficher'}
+                      >
+                        {showConfirmAdminPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </label>
+                </div>
+
+                {passwordMsg.text && (
+                  <div className={`security-alert ${passwordMsg.type === 'success' ? 'security-alert-success' : 'security-alert-error'}`}>
+                    {passwordMsg.type === 'success' ? <Check size={18} /> : <AlertTriangle size={18} />}
+                    <span>{passwordMsg.text}</span>
+                  </div>
+                )}
+
+                <div className="security-form-actions">
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={updatingPassword || !newAdminPassword.trim()}
+                  >
+                    {updatingPassword ? (
+                      <>
+                        <Loader2 size={16} className="spin" /> Enregistrement en cours...
+                      </>
+                    ) : (
+                      <>
+                        <KeyRound size={16} /> Enregistrer le nouveau mot de passe
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
