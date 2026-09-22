@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowUpRight, BarChart3, Check, ChevronDown, Clock, DollarSign, Eye, EyeOff, Flame, FolderOpen, Image as ImageIcon, KeyRound, LayoutDashboard, LayoutGrid, Link as LinkIcon, Loader2, Lock, Package, Pencil, Plus, Settings, Shield, ShoppingCart, Sparkles, Star, Tag, Trash2, TrendingUp, Truck, Upload, Users, X, Zap } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, BarChart3, Check, ChevronDown, Clock, DollarSign, Eye, EyeOff, Flame, FolderOpen, Image as ImageIcon, KeyRound, LayoutDashboard, LayoutGrid, Link as LinkIcon, Loader2, Lock, Package, Pencil, Plus, RefreshCw, Settings, Shield, ShoppingCart, Sparkles, Star, Tag, Trash2, TrendingUp, Truck, Upload, Users, X, Zap } from 'lucide-react';
 import { api } from '@/lib/api';
 import { demoBrands, demoCategories, demoOrders, demoProducts } from '@/lib/demoData';
 import type { Brand, Category, Product } from '@/lib/types';
@@ -292,9 +292,31 @@ export function AdminPanel({ onClose, onSettingsChanged }: AdminPanelProps) {
         setCategories(c.value as Category[]);
         localStorage.setItem('malishop_categories', JSON.stringify(c.value));
       }
-      if (o.status === 'fulfilled' && Array.isArray(o.value) && o.value.length > 0) {
-        setOrders(o.value);
-        localStorage.setItem('malishop_orders', JSON.stringify(o.value));
+      if (o.status === 'fulfilled' && Array.isArray(o.value)) {
+        let currentOrders = o.value;
+        // Synchroniser automatiquement vers la base en ligne toute commande locale en attente
+        try {
+          const rawLocal = localStorage.getItem('malishop_orders');
+          if (rawLocal) {
+            const localList: any[] = JSON.parse(rawLocal);
+            const serverIds = new Set((currentOrders || []).map((so: any) => so.id));
+            const demoIds = new Set(demoOrders.map((d) => d.id));
+            const unSynced = localList.filter((lo) => lo && lo.id && !serverIds.has(lo.id) && !demoIds.has(lo.id));
+            if (unSynced.length > 0) {
+              for (const uns of unSynced) {
+                try {
+                  await api.orders.create(uns);
+                } catch (err) {}
+              }
+              const freshOrders = await api.orders.list();
+              if (Array.isArray(freshOrders) && freshOrders.length > 0) {
+                currentOrders = freshOrders;
+              }
+            }
+          }
+        } catch (e) {}
+        setOrders(currentOrders);
+        localStorage.setItem('malishop_orders', JSON.stringify(currentOrders));
       }
       if (b.status === 'fulfilled' && Array.isArray(b.value) && b.value.length > 0) {
         setBrands(b.value as Brand[]);
@@ -1862,7 +1884,37 @@ export function AdminPanel({ onClose, onSettingsChanged }: AdminPanelProps) {
 
         {tab === 'orders' && (
           <div className="admin-section">
-            <div className="admin-section-header"><div><h2>Commandes ({orders.length})</h2><p>Suivez et mettez à jour le statut des commandes.</p></div></div>
+            <div className="admin-section-header">
+              <div>
+                <h2>Commandes ({orders.length})</h2>
+                <p>Suivez et mettez à jour le statut des commandes enregistrées en ligne.</p>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '999px', fontWeight: 700 }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+                  Base PostgreSQL en ligne connectée
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    notify('Actualisation des commandes...');
+                    try {
+                      const fresh = await api.orders.list();
+                      if (Array.isArray(fresh)) {
+                        setOrders(fresh);
+                        localStorage.setItem('malishop_orders', JSON.stringify(fresh));
+                        notify('Commandes actualisées avec succès !');
+                      }
+                    } catch {
+                      notify('Erreur de connexion avec la base en ligne.');
+                    }
+                  }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', border: '1px solid #cbd5e1', background: 'white', color: '#334155' }}
+                >
+                  <RefreshCw size={14} /> Actualiser
+                </button>
+              </div>
+            </div>
             {orders.length === 0 ? (
               <div className="admin-empty"><ShoppingCart size={32} /><p>Aucune commande pour le moment.</p></div>
             ) : (

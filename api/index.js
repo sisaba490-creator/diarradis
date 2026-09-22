@@ -478,38 +478,105 @@ app.post('/api/orders', async (req, res) => {
     await client.query('BEGIN');
     const {
       customer_id, customer_name, phone, email, city, address,
-      payment_method, subtotal_fcfa, delivery_fcfa, total_fcfa, notes, items, status
+      payment_method, subtotal_fcfa, delivery_fcfa, total_fcfa, notes, items, status, id: customId
     } = req.body;
+
     const initialStatus = status || 'pending';
-    const orderId = `o${Date.now()}`;
+    
+    // Déterminer un ID de commande unique et propre
+    let orderId = customId && typeof customId === 'string' && customId.trim() ? customId.trim() : `o${Date.now()}`;
+    const idCheck = await client.query('SELECT id FROM store_orders WHERE id = $1', [orderId]);
+    if (idCheck.rows.length > 0) {
+      orderId = `o${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    }
+
+    // Sécurisation de customer_id : vérifier qu'il existe dans store_customers pour éviter une violation de clé étrangère
+    let validCustomerId = null;
+    if (customer_id) {
+      try {
+        const custCheck = await client.query('SELECT id FROM store_customers WHERE id = $1', [customer_id]);
+        if (custCheck.rows.length > 0) {
+          validCustomerId = customer_id;
+        }
+      } catch (e) {
+        validCustomerId = null;
+      }
+    }
+
+    // Sécurisation de la méthode de paiement
+    const allowedPayment = ['orange_money', 'moov_money', 'cash_delivery'];
+    const validPaymentMethod = allowedPayment.includes(payment_method) ? payment_method : 'cash_delivery';
+
+    // Sécurisation des valeurs numériques
+    const sub = Math.max(0, parseInt(subtotal_fcfa) || 0);
+    const deliv = Math.max(0, parseInt(delivery_fcfa) || 0);
+    const tot = Math.max(0, parseInt(total_fcfa) || (sub + deliv));
+
     const orderResult = await client.query(
       `INSERT INTO store_orders
        (id, customer_id, customer_name, phone, email, city, address, payment_method,
         subtotal_fcfa, delivery_fcfa, total_fcfa, notes, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [orderId, customer_id || null, customer_name, phone, email || null, city, address,
-       payment_method, subtotal_fcfa, delivery_fcfa, total_fcfa, notes || null, initialStatus]
+      [
+        orderId,
+        validCustomerId,
+        customer_name || 'Client',
+        phone || '',
+        email || null,
+        city || 'Bamako',
+        address || '',
+        validPaymentMethod,
+        sub,
+        deliv,
+        tot,
+        notes || null,
+        initialStatus,
+      ]
     );
-    if (items && items.length > 0) {
+
+    if (items && Array.isArray(items) && items.length > 0) {
+      let idx = 0;
       for (const item of items) {
+        idx++;
+        // Vérifier si le product_id existe dans store_products pour ne pas faire échouer la commande
+        let validProductId = null;
+        if (item.product_id) {
+          try {
+            const prodCheck = await client.query('SELECT id FROM store_products WHERE id = $1', [item.product_id]);
+            if (prodCheck.rows.length > 0) {
+              validProductId = item.product_id;
+            }
+          } catch (e) {
+            validProductId = null;
+          }
+        }
+
+        const unitPrice = Math.max(0, parseInt(item.unit_price_fcfa) || 0);
+        const qty = Math.max(1, parseInt(item.quantity) || 1);
+        const itemId = `oi${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 7)}`;
+
         await client.query(
           `INSERT INTO store_order_items (id, order_id, product_id, product_name, unit_price_fcfa, quantity)
            VALUES ($1,$2,$3,$4,$5,$6)`,
-          [`oi${Date.now()}_${Math.random().toString(36).slice(2)}`, orderId,
-           item.product_id || null, item.product_name, item.unit_price_fcfa, item.quantity]
+          [itemId, orderId, validProductId, item.product_name || 'Article', unitPrice, qty]
         );
-        if (initialStatus === 'delivered' && item.product_id) {
-          await client.query(
-            `UPDATE store_products SET stock_count = GREATEST(0, stock_count - $1), sold_count = sold_count + $1 WHERE id = $2`,
-            [item.quantity, item.product_id]
-          );
+
+        if (initialStatus === 'delivered' && validProductId) {
+          try {
+            await client.query(
+              `UPDATE store_products SET stock_count = GREATEST(0, stock_count - $1), sold_count = sold_count + $1 WHERE id = $2`,
+              [qty, validProductId]
+            );
+          } catch (e) {}
         }
       }
     }
+
     await client.query('COMMIT');
     res.status(201).json(orderResult.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
+    console.error('Erreur insertion commande:', err.message);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();

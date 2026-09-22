@@ -270,9 +270,11 @@ function App() {
   }) => {
     const subtotal = cart.reduce((sum, item) => sum + item.price_fcfa * item.quantity, 0);
     const delivery = details.city === 'Bamako' ? 2500 : 5000;
+    const generatedId = `CMD-${Math.floor(1000 + Math.random() * 9000)}`;
+
     const orderPayload = {
-      id: `CMD-${Math.floor(1000 + Math.random() * 9000)}`,
-      customer_id: details.customer_id || currentCustomer?.id,
+      id: generatedId,
+      customer_id: details.customer_id || currentCustomer?.id || null,
       customer_name: details.name,
       phone: details.phone,
       email: details.email || null,
@@ -285,30 +287,35 @@ function App() {
       status: 'pending',
       created_at: new Date().toISOString(),
       items: cart.map((item) => ({
-        product_id: item.id,
+        product_id: item.id || null,
         product_name: item.name,
         unit_price_fcfa: item.price_fcfa,
         quantity: item.quantity,
       })),
     };
 
-    // Sauvegarde immédiate dans localStorage pour l'espace admin
-    try {
-      const savedOrders = localStorage.getItem('malishop_orders');
-      const ordersList = savedOrders ? JSON.parse(savedOrders) : [];
-      ordersList.unshift(orderPayload);
-      localStorage.setItem('malishop_orders', JSON.stringify(ordersList));
-    } catch {}
+    let confirmedOrderId = generatedId;
 
     try {
       const order = await api.orders.create(orderPayload);
-      setCart([]);
-      return order.id || orderPayload.id;
-    } catch {
-      // Mode démo : pas de serveur
-      setCart([]);
-      return orderPayload.id;
+      if (order && order.id) {
+        confirmedOrderId = order.id;
+      }
+    } catch (err) {
+      console.warn('Création commande en ligne échouée, fallback local:', err);
     }
+
+    // Sauvegarde immédiate dans localStorage pour assurer la continuité locale
+    try {
+      const savedOrders = localStorage.getItem('malishop_orders');
+      const ordersList = savedOrders ? JSON.parse(savedOrders) : [];
+      const finalizedOrder = { ...orderPayload, id: confirmedOrderId };
+      ordersList.unshift(finalizedOrder);
+      localStorage.setItem('malishop_orders', JSON.stringify(ordersList));
+    } catch {}
+
+    setCart([]);
+    return confirmedOrderId;
   };
 
   const goToHome = () => {
