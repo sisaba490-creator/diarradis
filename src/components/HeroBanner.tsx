@@ -111,21 +111,11 @@ export function HeroBanner({ onNavigate, siteSettings = {}, resetTrigger = 0 }: 
   // Synchronisation continue du ref avec l'état courant
   currentRef.current = current;
 
-  const isAutoRotate = siteSettings?.hero_autorotate === 'true';
+  // Activé par défaut — désactivé seulement si l'admin met explicitement 'false'
+  const isAutoRotate = siteSettings?.hero_autorotate !== 'false';
 
-  const startTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (!isAutoRotate) return;
-    timerRef.current = setInterval(() => {
-      if (!isHoveredRef.current) {
-        const nextIdx = (currentRef.current + 1) % slides.length;
-        goTo(nextIdx, 'next');
-      }
-    }, 7000);
-  };
+  // Ref stable vers goTo pour éviter les stale closures dans setInterval
+  const goToRef = useRef<(index: number, dir: 'next' | 'prev') => void>(() => {});
 
   const goTo = (index: number, dir: 'next' | 'prev') => {
     setAnimating(true);
@@ -135,8 +125,31 @@ export function HeroBanner({ onNavigate, siteSettings = {}, resetTrigger = 0 }: 
       currentRef.current = index;
       setAnimating(false);
     }, 380);
-    startTimer();
   };
+
+  // Mettre à jour la ref à chaque render pour avoir toujours la dernière version
+  goToRef.current = goTo;
+
+  // Démarrer / redémarrer le timer selon le réglage auto-rotation
+  useEffect(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (!isAutoRotate) return;
+    timerRef.current = setInterval(() => {
+      if (!isHoveredRef.current) {
+        const nextIdx = (currentRef.current + 1) % slides.length;
+        goToRef.current(nextIdx, 'next');
+      }
+    }, 5000);
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [isAutoRotate]);
 
   // Revenir instantanément au slide 0 quand l'utilisateur clique sur Accueil
   useEffect(() => {
@@ -144,7 +157,6 @@ export function HeroBanner({ onNavigate, siteSettings = {}, resetTrigger = 0 }: 
       setCurrent(0);
       currentRef.current = 0;
       setAnimating(false);
-      startTimer();
     }
   }, [resetTrigger]);
 
@@ -157,17 +169,6 @@ export function HeroBanner({ onNavigate, siteSettings = {}, resetTrigger = 0 }: 
     const prevIdx = (currentRef.current - 1 + slides.length) % slides.length;
     goTo(prevIdx, 'prev');
   };
-
-  // Gestion du timer selon réglage auto-rotation
-  useEffect(() => {
-    startTimer();
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [isAutoRotate]);
 
   // Balayage lumineux diagonal continu
   useEffect(() => {
