@@ -263,11 +263,11 @@ function App() {
 
   const handleShareStore = () => {
     const storeUrl = window.location.origin;
-    const shareText = `🌟 Découvrez *DIARRA Distribution (MaliShop)* !\n\nN°1 de l'électroménager, smartphones & high-tech à Bamako et partout au Mali.\n🚚 Livraison rapide 24-48h\n💳 Paiement Orange Money, Moov Money et Cash à la livraison.\n\n👉 Visitez le site et commandez ici : ${storeUrl}`;
+    const shareText = `🌟 Découvrez *DIARRA Distribution (MaliShop)* !\n\nN°1 de l'électroménager, déco & jardin, électronique à Bamako et partout au Mali.\n🚚 Livraison rapide 24-48h\n💳 Paiement Orange Money, Moov Money et Cash à la livraison.\n\n👉 Visitez le site et commandez ici : ${storeUrl}`;
     
     if (typeof navigator !== 'undefined' && navigator.share) {
       navigator.share({
-        title: 'DIARRA Distribution | MaliShop',
+        title: 'DIARRA Distribution | MaliShop — Électroménager, Déco et Jardin & Electronique',
         text: shareText,
         url: storeUrl,
       }).catch(() => {});
