@@ -20,7 +20,8 @@ import {
   User, 
   UserCheck, 
   X, 
-  Zap 
+  Zap,
+  Share2
 } from 'lucide-react';
 import type { Category, Customer, Product, Brand } from '@/lib/types';
 import { WhatsAppIcon, buildWhatsAppUrl } from '@/lib/whatsapp';
@@ -46,6 +47,7 @@ type NavigationDrawerProps = {
   onOpenAccount: () => void;
   onOpenAdmin: () => void;
   onOpenFavorites?: () => void;
+  onShareStore?: () => void;
   favoritesCount?: number;
   siteSettings: Record<string, string>;
 };
@@ -62,6 +64,7 @@ export function NavigationDrawer({
   onOpenAccount,
   onOpenAdmin,
   onOpenFavorites,
+  onShareStore,
   favoritesCount = 0,
   siteSettings,
 }: NavigationDrawerProps) {
@@ -270,6 +273,30 @@ export function NavigationDrawer({
               </div>
             </div>
           </div>
+
+          {/* Recommander & Partager la boutique */}
+          {onShareStore && (
+            <div className="nav-drawer-section">
+              <div className="nav-share-box">
+                <div className="nav-share-header">
+                  <span className="nav-share-tag"><Share2 size={11} /> Viral</span>
+                  <strong>Partager la boutique</strong>
+                  <p>Faites profiter vos proches et vos contacts à Bamako de nos prix exclusifs !</p>
+                </div>
+                <button
+                  type="button"
+                  className="nav-share-action-btn"
+                  onClick={() => {
+                    onShareStore();
+                    onClose();
+                  }}
+                >
+                  <WhatsAppIcon size={16} />
+                  <span>Partager sur WhatsApp</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Pied du tiroir : Admin trigger */}

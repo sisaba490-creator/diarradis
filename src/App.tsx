@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, BadgeCheck, Cable, Check, ChevronDown, CookingPot, Headphones, Heart, Lock, Menu, Package, Phone, Refrigerator, Search, ShieldCheck, ShoppingBag, Smartphone, SlidersHorizontal, Sparkles, Truck, UserCheck, UserRound, Zap } from 'lucide-react';
+import { ArrowRight, BadgeCheck, Cable, Check, ChevronDown, CookingPot, Headphones, Heart, Lock, Menu, Package, Phone, Refrigerator, Search, Share2, ShieldCheck, ShoppingBag, Smartphone, SlidersHorizontal, Sparkles, Truck, UserCheck, UserRound, Zap } from 'lucide-react';
 import { api } from '@/lib/api';
 import { demoBrands, demoCategories, demoProducts, demoReviews } from '@/lib/demoData';
 import type { Brand, CartItem, Category, Customer, PaymentMethod, Product, Review } from '@/lib/types';
@@ -228,9 +228,52 @@ function App() {
     });
   };
 
+  // Deep-linking: ouvrir automatiquement le produit passé dans l'URL (?p=ID ou ?product=ID)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const prodId = params.get('p') || params.get('product');
+    if (prodId && products.length > 0) {
+      const found = products.find((p) => String(p.id) === String(prodId));
+      if (found) {
+        setSelectedProduct(found);
+      }
+    }
+  }, [products]);
+
   const selectProduct = (product: Product) => {
     setSelectedProduct(product);
     setRecentlyViewed((current) => [product.id, ...current.filter((id) => id !== product.id)].slice(0, 10));
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('p', String(product.id));
+      window.history.replaceState(null, '', url.toString());
+    } catch {}
+  };
+
+  const closeProduct = () => {
+    setSelectedProduct(null);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('p');
+      url.searchParams.delete('product');
+      const cleanUrl = url.pathname + (url.search ? url.search : '') + url.hash;
+      window.history.replaceState(null, '', cleanUrl);
+    } catch {}
+  };
+
+  const handleShareStore = () => {
+    const storeUrl = window.location.origin;
+    const shareText = `🌟 Découvrez *DIARRA Distribution (MaliShop)* !\n\nN°1 de l'électroménager, smartphones & high-tech à Bamako et partout au Mali.\n🚚 Livraison rapide 24-48h\n💳 Paiement Orange Money, Moov Money et Cash à la livraison.\n\n👉 Visitez le site et commandez ici : ${storeUrl}`;
+    
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      navigator.share({
+        title: 'DIARRA Distribution | MaliShop',
+        text: shareText,
+        url: storeUrl,
+      }).catch(() => {});
+    } else {
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`, '_blank');
+    }
   };
 
   const handleLoginSuccess = (customer: Customer) => {
@@ -410,6 +453,15 @@ function App() {
           >
             <WhatsAppIcon size={12} /> WhatsApp
           </a>
+          <span className="announcement-sep">·</span>
+          <button
+            type="button"
+            className="announcement-share-btn"
+            onClick={handleShareStore}
+            title="Partager le site DIARRA Distribution"
+          >
+            <Share2 size={12} /> Partager
+          </button>
           <button className="admin-trigger" onClick={() => setAdminOpen(true)}><Lock size={11} /> Admin</button>
         </span>
       </div>
@@ -769,7 +821,7 @@ function App() {
           relatedProducts={relatedProducts}
           whatsappPhone={s('whatsapp_phone', s('announcement_phone', '+223 74 79 82 16'))}
           whatsappOrderEnabled={s('whatsapp_order_enabled', 'true') !== 'false'}
-          onClose={() => setSelectedProduct(null)}
+          onClose={closeProduct}
           onAdd={addToCart}
           onSelectProduct={selectProduct}
         />
@@ -788,6 +840,7 @@ function App() {
         onOpenAccount={() => { setRequiredAuthForCheckout(false); setAccountOpen(true); }}
         onOpenAdmin={() => setAdminOpen(true)}
         onOpenFavorites={() => notify(`${favorites.length} favori${favorites.length > 1 ? 's' : ''}`)}
+        onShareStore={handleShareStore}
         favoritesCount={favorites.length}
         siteSettings={siteSettings}
       />

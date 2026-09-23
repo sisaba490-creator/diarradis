@@ -3,9 +3,12 @@ import {
   BadgeCheck,
   Check,
   ChevronRight,
+  Copy,
+  ExternalLink,
   Minus,
   Package,
   Plus,
+  Share2,
   ShieldCheck,
   ShoppingCart,
   Sparkles,
@@ -44,6 +47,56 @@ export function ProductDetailModal({
   const [quantity, setQuantity] = useState(product.min_order_qty || 1);
   const [tab, setTab] = useState<'description' | 'specs' | 'reviews'>('description');
   const [addedAnim, setAddedAnim] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const getProductShareUrl = () => {
+    return `${window.location.origin}/?p=${product.id}`;
+  };
+
+  const handleShareWhatsApp = () => {
+    const url = getProductShareUrl();
+    const text = `🔥 Regardez cette offre chez *DIARRA Distribution* !\n\n*${product.name}*\n💰 Prix : *${formatPrice(currentPrice)} FCFA*\n🚚 Livraison express à Bamako et partout au Mali\n\n👉 Commandez directement ici : ${url}`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const handleShareFacebook = () => {
+    const url = getProductShareUrl();
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank', 'width=600,height=500');
+  };
+
+  const handleCopyLink = async () => {
+    const url = getProductShareUrl();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2400);
+    } catch {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2400);
+    }
+  };
+
+  const handleNativeShare = async () => {
+    const url = getProductShareUrl();
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: `${product.name} | DIARRA Distribution`,
+          text: `Découvrez ${product.name} à ${formatPrice(currentPrice)} FCFA sur DIARRA Distribution !`,
+          url,
+        });
+      } catch {}
+    }
+  };
 
   useEffect(() => {
     setActiveImage(0);
@@ -309,6 +362,68 @@ export function ProductDetailModal({
                   </div>
                 </button>
               )}
+            </div>
+ 
+            {/* ═══ SECTION PARTAGE SOCIAL VIRAL ═══ */}
+            <div className="pdm-share-box">
+              <div className="pdm-share-title">
+                <Share2 size={13} className="pdm-share-header-icon" />
+                <span>Partager cette offre à un proche :</span>
+              </div>
+              <div className="pdm-share-actions">
+                <button
+                  type="button"
+                  className="pdm-share-pill pdm-share-wa"
+                  onClick={handleShareWhatsApp}
+                  title="Partager directement sur WhatsApp"
+                >
+                  <WhatsAppIcon size={15} />
+                  <span>WhatsApp</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="pdm-share-pill pdm-share-fb"
+                  onClick={handleShareFacebook}
+                  title="Partager sur Facebook"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                  </svg>
+                  <span>Facebook</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`pdm-share-pill pdm-share-copy ${copied ? 'is-copied' : ''}`}
+                  onClick={handleCopyLink}
+                  title="Copier le lien direct du produit"
+                >
+                  {copied ? (
+                    <>
+                      <Check size={14} className="pdm-copy-check" />
+                      <span>Lien copié !</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={14} />
+                      <span>Copier le lien</span>
+                    </>
+                  )}
+                </button>
+
+                {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+                  <button
+                    type="button"
+                    className="pdm-share-pill pdm-share-more"
+                    onClick={handleNativeShare}
+                    title="Plus d'options de partage"
+                  >
+                    <ExternalLink size={14} />
+                    <span>Autre</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Badges de Confiance 3 Colonnes */}
