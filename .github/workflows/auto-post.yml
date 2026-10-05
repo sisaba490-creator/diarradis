@@ -1,0 +1,41 @@
+name: Publication Automatique Réseaux Sociaux
+
+on:
+  schedule:
+    # Déclenchement automatique toutes les 6 heures (4 fois par jour) : 00:00, 06:00, 12:00, 18:00 UTC
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    # Permet de déclencher manuellement le robot d'un simple clic sur GitHub
+    inputs:
+      dry_run:
+        description: 'Mode simulation (--dry-run) sans publication réelle'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  auto-publish:
+    name: Publier sur Facebook & Instagram
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Récupérer le code source
+        uses: actions/checkout@v4
+
+      - name: Configurer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Lancer la publication automatique
+        env:
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          SITE_URL: 'https://diarradis3.vercel.app'
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            node scripts/auto-poster.js --dry-run
+          else
+            node scripts/auto-poster.js
+          fi
